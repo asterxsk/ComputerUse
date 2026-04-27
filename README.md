@@ -1,135 +1,185 @@
-# AI Agent Desktop Automation CLI
+# ComputerUse
 
-Cross-platform Python CLI for AI agents to automate desktop via screen capture (Read) and input (Write). Modular functions invoked via flags.
+[![license: MIT](https://img.shields.io/badge/License-MIT-green.svg?style=for-the-badge)](./LICENSE)
 
-## Quick Start
+A Python CLI that gives AI agents safe, structured control of a user's desktop — **Read** tools to see the screen, **Write** tools to move the mouse, type text, and run keyboard shortcuts. Destructive shortcuts always ask the user for confirmation.
 
-### Install as a global CLI on Windows (one-liner)
+<!-- Demo
 
-Open **PowerShell** and run:
+Insert gif or link to demo
+
+-->
+
+## Installation
+
+### Windows — one-liner (recommended)
 
 ```powershell
 irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1 | iex
 ```
 
-The installer will:
+This will:
 
 1. Verify Python 3.9+ (offers winget install if missing).
-2. Download the repo to `%LOCALAPPDATA%\ComputerUse`.
-3. Create an isolated virtualenv and install dependencies.
-4. Register a `computer-use` launcher on your user PATH.
+2. Download the repo into `%LOCALAPPDATA%\ComputerUse`.
+3. Create an isolated venv and install `click`, `pyautogui`, `mss`.
+4. Write a `computer-use.cmd` launcher into `%LOCALAPPDATA%\ComputerUse\bin` and add that folder to your User PATH.
+5. Deploy the agent skill to `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md`.
+6. Verify with `computer-use --help`.
 
-Then **open a new terminal** and use the CLI from anywhere:
-
-```powershell
-computer-use --help
-computer-use vision --monitor -1
-computer-use mouse-move 500 400
-computer-use keyboard-type "hello"
-computer-use keyboard-shortcut alt_tab
-```
-
-To force a full reinstall:
+Reinstall / overwrite:
 
 ```powershell
-$tmp = "$env:TEMP\computer-use-install.ps1"
-irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1 -OutFile $tmp
-powershell -ExecutionPolicy Bypass -File $tmp -Force
+$s = (irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1); iex "& { $s } -Force"
 ```
 
-### Manual / development install
+### Manual / development install (any OS)
+
+Prerequisites
+
+- Python 3.9+
+- Git
 
 ```bash
+git clone https://github.com/asterxsk/ComputerUse.git
+cd ComputerUse
+python -m venv .venv
+# Windows
+.\.venv\Scripts\activate
+# macOS / Linux
+source .venv/bin/activate
 pip install -r requirements.txt
 python cli.py --help
 ```
 
-**Permissions Guide for Agents:**
-- **Read Tools** (safe, view-only): `vision` - Capture screen state.
-- **Write Tools** (mutate system): `mouse_move`, `mouse_click`, `keyboard_type`, `keyboard_shortcut` - Always reason about impact.
+## Usage / Examples
 
-## Commands
+After a one-liner install, open a **new** terminal and use the `computer-use` launcher. In a dev clone, use `python cli.py` instead.
 
-### Read: Vision (Screen Capture)
 ```bash
-python cli.py vision --max-images 5 --monitor -1
-```
-- Circular buffer: Max 5 PNGs in `./Computer-Use/`, auto-deletes oldest.
-- Monitor support:
-  - `--monitor -1` = primary monitor
-  - `--monitor 0` = all monitors combined
-  - `--monitor 1..N` = specific monitor index
-- Invalid monitor indexes return a clear error showing valid range.
-- Returns: Path to latest screenshot.
-- Use: Get current UI state before Write actions.
+# READ
+computer-use vision                          # capture primary monitor
+computer-use vision --monitor 0              # capture all monitors combined
+computer-use vision --monitor 2              # capture monitor #2
+computer-use vision --max-images 3           # shrink the circular buffer
 
-### Write: Mouse Control
+# WRITE - mouse
+computer-use mouse-move 640 400 --duration 0.3
+computer-use mouse-click --button left --x 450 --y 350
+computer-use mouse-click --button right
+computer-use mouse-click --clicks 2
+
+# WRITE - keyboard
+computer-use keyboard-type "hello world" --interval 0.02
+
+# WRITE - shortcuts (destructive ones prompt y/N every time)
+computer-use keyboard-shortcut alt_tab       # runs
+computer-use keyboard-shortcut alt_f4        # prompts for confirmation
+```
+
+Screenshots are written to `./Computer-Use/` (auto-created) with names like `screen_YYYYMMDD_HHMMSS_mmm.png`. Only the 5 most recent are kept.
+
+## Features
+
+- **Vision (Read)** — fast screen capture via `mss`, multi-monitor aware (`-1` primary, `0` all, `1..N` specific), circular buffer in `./Computer-Use/` (max 5 PNGs, oldest auto-deleted).
+- **Mouse (Write)** — smooth absolute-coordinate moves, left / right / middle clicks, multi-click.
+- **Keyboard (Write)** — arbitrary text entry with configurable keystroke interval.
+- **Shortcut runner (Write, safety-gated)** — named shortcuts; destructive ones (`alt_f4`, `ctrl_alt_del`, `cmd_q`) always prompt the user `y/N` before firing, every call.
+- **Agent skill file** — `skill/SKILL.md` is deployed by the installer to `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md` so LLM agents can load the tool definitions directly.
+- **Clear Read/Write permission model** designed for agent reasoning.
+- **Cross-platform core** — Windows / macOS / Linux (installer is Windows; manual install works anywhere).
+
+## Configuration
+
+### Shortcut registry
+
+Edit `shortcuts.py` to add or change shortcuts:
+
+```python
+SHORTCUTS = {
+    "alt_tab":      {"keys": ["alt", "tab"],       "destructive": False},
+    "cmd_space":    {"keys": ["command", "space"], "destructive": False},
+    "win_r":        {"keys": ["win", "r"],         "destructive": False},
+    "ctrl_w":       {"keys": ["ctrl", "w"],        "destructive": False},
+    "alt_f4":       {"keys": ["alt", "f4"],        "destructive": True},
+    "ctrl_alt_del": {"keys": ["ctrl", "alt", "del"], "destructive": True},
+    "cmd_q":        {"keys": ["command", "q"],     "destructive": True},
+}
+```
+
+Any shortcut with `"destructive": True` will always prompt the user before executing.
+
+### Install paths (installer overrides)
+
+```powershell
+# Custom locations
+$params = @{ InstallDir = "D:\Tools\ComputerUse"; SkillDir = "D:\agents\skills\ComputerUse" }
+irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1 -OutFile $env:TEMP\cu.ps1
+& $env:TEMP\cu.ps1 @params
+```
+
+Default layout:
+
+| What       | Path                                                  |
+|------------|-------------------------------------------------------|
+| Source     | `%LOCALAPPDATA%\ComputerUse\`                         |
+| Launcher   | `%LOCALAPPDATA%\ComputerUse\bin\computer-use.cmd`     |
+| venv       | `%LOCALAPPDATA%\ComputerUse\.venv\`                   |
+| Skill      | `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md`   |
+| Screenshots| `./Computer-Use/` (in the CWD where you run it)       |
+
+## Agent Skill
+
+The repo ships a structured skill document at [`skill/SKILL.md`](./skill/SKILL.md) intended to be loaded directly into an LLM agent's context. It contains:
+
+- Permission model (Read vs Write).
+- Exact CLI syntax and flags per tool.
+- Shortcut registry and destructive-prompt contract.
+- Recommended agent workflow (observe → analyze → act → verify).
+- Error classes and expected agent responses.
+
+The Windows installer copies this file to `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md` so any local agent that scans `~/.agents/skills/` picks it up automatically.
+
+## Development
+
 ```bash
-# Move
-python cli.py mouse-move 400 300 --duration 0.5
+git clone https://github.com/asterxsk/ComputerUse.git
+cd ComputerUse
+python -m venv .venv
+.\.venv\Scripts\activate        # or: source .venv/bin/activate
+pip install -r requirements.txt
 
-# Click
-python cli.py mouse-click --button left --x 450 --y 350 --clicks 1
-python cli.py mouse-click --button right  # Current position
+# try each tool
+python cli.py vision
+python cli.py vision --monitor 0
+python cli.py mouse-move 500 400
+python cli.py mouse-click --button right
+python cli.py keyboard-type "hello"
+python cli.py keyboard-shortcut alt_tab
+python cli.py keyboard-shortcut alt_f4       # prompts y/N
 ```
 
-### Write: Keyboard Type
-```bash
-python cli.py keyboard-type "Hello World" --interval 0.05
-```
+## Roadmap
 
-### Write: Shortcuts (Safety-Gated)
-```bash
-python cli.py keyboard-shortcut alt_tab     # Safe
-python cli.py keyboard-shortcut alt_f4      # PROMPTS: "WARNING: destructive. y/N?"
-```
-- Destructive (always prompts): alt_f4, ctrl_alt_del, cmd_q, etc.
-- Safe: alt_tab, cmd_space, win_r, ctrl_w.
-- Extend `shortcuts.py`.
+- macOS and Linux installer scripts (brew / curl pipe).
+- Drag / scroll primitives.
+- OCR / element-detection helpers for agents to resolve coordinates from the screenshot.
+- Per-app shortcut packs.
 
-## System Skill / Tool Definitions (for LLM Agents)
+## Contributing
 
-```
-TOOLS:
-1. vision --max-images INT (default=5) --monitor INT (default=-1)
-   Purpose: Read screen state. Returns PNG path. Circular buffer auto-manages.
-   Monitor flags: -1 primary, 0 all monitors, 1..N specific monitor.
-   Invalid monitor index => explicit error with available range.
-   Permission: READ (safe)
-   Example: "Capture monitor 2 UI for dual-display workflow"
+Contributions welcome — fork, create a branch (`blackboxai/<topic>` or `feat/<topic>`), and open a pull request. Please keep the Read/Write categorization explicit for any new tool, and update `skill/SKILL.md` when you add or change commands.
 
-2. mouse-move X:int Y:int --duration FLOAT (default=0.5)
-   Purpose: Smooth move mouse to coords (0-1920x1080 typical).
-   Permission: WRITE (moves cursor)
-   Example: "Move to button center"
+## Authors
 
-3. mouse-click [--button left/right/middle] [--x INT] [--y INT] [--clicks INT=1]
-   Purpose: Click at coords or current pos.
-   Permission: WRITE (interacts)
-   Example: "Click submit button"
+- asterxsk ([@asterxsk](https://github.com/asterxsk))
 
-4. keyboard-type TEXT [--interval FLOAT=0.05]
-   Purpose: Type arbitrary text.
-   Permission: WRITE (inputs text)
-   Example: "Enter search query"
+## Acknowledgements
 
-5. keyboard-shortcut SHORTCUT:str
-   Purpose: Run predefined shortcut. Destructive ALWAYS prompts user.
-   Permission: WRITE (system action)
-   Examples: "alt_tab" (switch), "alt_f4" (prompts close)
-   List in shortcuts.py
-```
+- [`click`](https://click.palletsprojects.com/) for the CLI framework.
+- [`mss`](https://python-mss.readthedocs.io/) for fast cross-platform screen capture.
+- [`pyautogui`](https://pyautogui.readthedocs.io/) for mouse and keyboard input.
 
-## Architecture
-- `cli.py`: Click-based entrypoint.
-- `vision.py`: mss-based capture, circular buffer logic, multi-monitor validation.
-- `input_*.py`: pyautogui wrappers.
-- `shortcuts.py`: Config + safety.
+## License
 
-## Troubleshooting
-- Grant accessibility/automation permissions (macOS System Prefs > Security).
-- Windows: Run as admin if needed.
-- Coords: Use vision first, analyze screenshot for targets.
-
-## Extend
-Add shortcuts in `shortcuts.py`. New tools as click commands.
+Distributed under the MIT License. See [LICENSE](./LICENSE) for details.

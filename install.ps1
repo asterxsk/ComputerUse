@@ -18,9 +18,10 @@
 
 [CmdletBinding()]
 param(
-    [string]$Repo   = "asterxsk/ComputerUse",
-    [string]$Branch = "main",
+    [string]$Repo       = "asterxsk/ComputerUse",
+    [string]$Branch     = "main",
     [string]$InstallDir = "$env:LOCALAPPDATA\ComputerUse",
+    [string]$SkillDir   = "$env:USERPROFILE\.agents\skills\ComputerUse",
     [switch]$Force
 )
 
@@ -107,6 +108,25 @@ Remove-Item $extractTemp -Recurse -Force
 Write-Ok "Source extracted to $InstallDir"
 
 # -------------------------------------------------------------------
+# 3b. Deploy agent skill
+# -------------------------------------------------------------------
+Write-Step "Deploying agent skill to $SkillDir"
+
+$skillSrc = Join-Path $InstallDir "skill\SKILL.md"
+if (Test-Path $skillSrc) {
+    if (Test-Path $SkillDir) {
+        if ($Force) {
+            Remove-Item -Recurse -Force $SkillDir
+        }
+    }
+    New-Item -ItemType Directory -Force -Path $SkillDir | Out-Null
+    Copy-Item -Path $skillSrc -Destination (Join-Path $SkillDir "SKILL.md") -Force
+    Write-Ok "Skill installed: $SkillDir\SKILL.md"
+} else {
+    Write-Warn2 "Skill source not found at $skillSrc - skipping skill deployment."
+}
+
+# -------------------------------------------------------------------
 # 4. Create venv + install deps
 # -------------------------------------------------------------------
 Write-Step "Creating virtual environment"
@@ -183,4 +203,5 @@ Write-Host "  computer-use keyboard-shortcut alt_tab"
 Write-Host ""
 Write-Host "Install dir:  $InstallDir"
 Write-Host "Launcher:     $shimPath"
-Write-Host "Uninstall:    Remove $InstallDir and drop `$binDir` from User PATH."
+Write-Host "Skill:        $SkillDir\SKILL.md"
+Write-Host "Uninstall:    Remove $InstallDir, remove $SkillDir, and drop $binDir from User PATH."
