@@ -87,7 +87,8 @@ New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Write-Step "Downloading repo $Repo@$Branch"
 
 $zipUrl  = "https://codeload.github.com/$Repo/zip/refs/heads/$Branch"
-$zipPath = Join-Path $env:TEMP "computer-use-$Branch.zip"
+$safeBranch = $Branch -replace '[\\/:*?"<>|]', '-'
+$zipPath = Join-Path $env:TEMP "computer-use-$safeBranch.zip"
 
 try {
     Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
