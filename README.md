@@ -21,17 +21,36 @@ irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1 | ie
 This will:
 
 1. Verify Python 3.9+ (offers winget install if missing).
-2. Download the repo into `%LOCALAPPDATA%\ComputerUse`.
-3. Create an isolated venv and install `click`, `pyautogui`, `mss`.
-4. Write a `computer-use.cmd` launcher into `%LOCALAPPDATA%\ComputerUse\bin` and add that folder to your User PATH.
-5. Deploy the agent skill to `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md`.
-6. Verify with `computer-use --help`.
+2. Resolve the **latest GitHub release** of `asterxsk/ComputerUse` and download that release's source zipball (falls back to the `main` branch if no release has been published yet).
+3. Extract into `%LOCALAPPDATA%\ComputerUse`.
+4. Create an isolated venv and install `click`, `pyautogui`, `mss`.
+5. Write a `computer-use.cmd` launcher into `%LOCALAPPDATA%\ComputerUse\bin` and add that folder to your User PATH.
+6. Deploy the agent skill to `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md`.
+7. Verify with `computer-use --help`.
 
 Reinstall / overwrite:
 
 ```powershell
 $s = (irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1); iex "& { $s } -Force"
 ```
+
+Install a specific release tag or a dev branch:
+
+```powershell
+# Specific release tag
+$s = (irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1); iex "& { $s } -Tag v0.1.0"
+
+# Dev branch (skips release lookup)
+$s = (irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/install.ps1); iex "& { $s } -Branch main"
+```
+
+### Windows — uninstall
+
+```powershell
+irm https://raw.githubusercontent.com/asterxsk/ComputerUse/main/uninstall.ps1 | iex
+```
+
+Removes `%LOCALAPPDATA%\ComputerUse`, the agent skill at `%USERPROFILE%\.agents\skills\ComputerUse`, and drops the `bin` entry from your User PATH. Pass `-Force` to skip the confirmation prompt, or `-KeepSkill` to keep the skill file in place.
 
 ### Manual / development install (any OS)
 
@@ -127,6 +146,7 @@ Default layout:
 | venv       | `%LOCALAPPDATA%\ComputerUse\.venv\`                   |
 | Skill      | `%USERPROFILE%\.agents\skills\ComputerUse\SKILL.md`   |
 | Screenshots| `./Computer-Use/` (in the CWD where you run it)       |
+| Version info| `%LOCALAPPDATA%\ComputerUse\.install-info.json`     |
 
 ## Agent Skill
 

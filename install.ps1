@@ -4,11 +4,19 @@
 #
 # What this does:
 #   1. Verifies Python 3.9+ is available (offers winget install if missing).
-#   2. Downloads the repo into %LOCALAPPDATA%\ComputerUse.
-#   3. Creates an isolated venv and installs requirements.
-#   4. Writes a `computer-use.cmd` shim into %LOCALAPPDATA%\ComputerUse\bin
+#   2. Resolves the latest GitHub release of asterxsk/ComputerUse and downloads
+#      the source zipball (falls back to the `main` branch if no release exists).
+#   3. Extracts into %LOCALAPPDATA%\ComputerUse and deploys the agent skill
+#      to %USERPROFILE%\.agents\skills\ComputerUse\SKILL.md.
+#   4. Creates an isolated venv and installs requirements.
+#   5. Writes a `computer-use.cmd` shim into %LOCALAPPDATA%\ComputerUse\bin
 #      and adds that folder to the current user's PATH.
-#   5. Verifies the install by running `computer-use --help`.
+#   6. Verifies the install by running `computer-use --help`.
+#
+# Override options:
+#   -Tag v0.1.0         Install a specific release tag instead of latest.
+#   -Branch main        Install from a branch (dev mode, skips release API).
+#   -Force              Remove existing install before reinstalling.
 #
 # After install, open a NEW terminal and run:
 #   computer-use vision
@@ -19,7 +27,8 @@
 [CmdletBinding()]
 param(
     [string]$Repo       = "asterxsk/ComputerUse",
-    [string]$Branch     = "main",
+    [string]$Tag        = "",
+    [string]$Branch     = "",
     [string]$InstallDir = "$env:LOCALAPPDATA\ComputerUse",
     [string]$SkillDir   = "$env:USERPROFILE\.agents\skills\ComputerUse",
     [switch]$Force
@@ -82,16 +91,59 @@ if (Test-Path $InstallDir) {
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 
 # -------------------------------------------------------------------
-# 3. Fetch repo zip
+# 3. Resolve source: release (default) -> tag -> branch fallback
 # -------------------------------------------------------------------
-Write-Step "Downloading repo $Repo@$Branch"
+$apiHeaders = @{
+    "User-Agent" = "ComputerUse-Installer"
+    "Accept"     = "application/vnd.github+json"
+}
 
-$zipUrl  = "https://codeload.github.com/$Repo/zip/refs/heads/$Branch"
-$safeBranch = $Branch -replace '[\\/:*?"<>|]', '-'
-$zipPath = Join-Path $env:TEMP "computer-use-$safeBranch.zip"
+$zipUrl    = $null
+$sourceRef = $null
+$sourceKind = $null  # "release" | "tag" | "branch"
+
+if ($Branch) {
+    # Explicit branch override (dev mode)
+    Write-Step "Using branch override: $Branch"
+    $sourceKind = "branch"
+    $sourceRef  = $Branch
+    $zipUrl     = "https://codeload.github.com/$Repo/zip/refs/heads/$Branch"
+}
+elseif ($Tag) {
+    # Explicit tag
+    Write-Step "Using release tag: $Tag"
+    $sourceKind = "tag"
+    $sourceRef  = $Tag
+    $zipUrl     = "https://api.github.com/repos/$Repo/zipball/refs/tags/$Tag"
+}
+else {
+    # Default: resolve latest release via GitHub API
+    Write-Step "Resolving latest release of $Repo"
+    try {
+        $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$Repo/releases/latest" `
+                                     -Headers $apiHeaders -UseBasicParsing -ErrorAction Stop
+        $sourceKind = "release"
+        $sourceRef  = $release.tag_name
+        $zipUrl     = $release.zipball_url
+        Write-Ok "Latest release: $sourceRef"
+    } catch {
+        Write-Warn2 "No published release found (or API unreachable). Falling back to 'main' branch."
+        $sourceKind = "branch"
+        $sourceRef  = "main"
+        $zipUrl     = "https://codeload.github.com/$Repo/zip/refs/heads/main"
+    }
+}
+
+# -------------------------------------------------------------------
+# 3a. Download + extract
+# -------------------------------------------------------------------
+Write-Step "Downloading $sourceKind '$sourceRef'"
+
+$safeRef = $sourceRef -replace '[\\/:*?"<>|]', '-'
+$zipPath = Join-Path $env:TEMP "computer-use-$safeRef.zip"
 
 try {
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
+    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing -Headers $apiHeaders
 } catch {
     Write-Err "Failed to download $zipUrl"
     Write-Err $_.Exception.Message
@@ -104,9 +156,20 @@ Expand-Archive -Path $zipPath -DestinationPath $extractTemp -Force
 Remove-Item $zipPath -Force
 
 $inner = Get-ChildItem $extractTemp -Directory | Select-Object -First 1
+if (-not $inner) {
+    Write-Err "Archive did not contain a top-level directory."
+    exit 1
+}
 Copy-Item -Path (Join-Path $inner.FullName "*") -Destination $InstallDir -Recurse -Force
 Remove-Item $extractTemp -Recurse -Force
 Write-Ok "Source extracted to $InstallDir"
+
+# Record installed version for uninstall / upgrade visibility
+@{
+    ref       = $sourceRef
+    kind      = $sourceKind
+    installed = (Get-Date).ToString("o")
+} | ConvertTo-Json | Set-Content -Path (Join-Path $InstallDir ".install-info.json") -Encoding UTF8
 
 # -------------------------------------------------------------------
 # 3b. Deploy agent skill
@@ -195,7 +258,7 @@ if ($LASTEXITCODE -eq 0) {
 }
 
 Write-Host ""
-Write-Host "ComputerUse CLI installed successfully." -ForegroundColor Green
+Write-Host "ComputerUse CLI installed successfully ($sourceKind $sourceRef)." -ForegroundColor Green
 Write-Host "Open a NEW PowerShell / CMD window, then try:" -ForegroundColor Green
 Write-Host "  computer-use --help"
 Write-Host "  computer-use vision"
@@ -205,4 +268,4 @@ Write-Host ""
 Write-Host "Install dir:  $InstallDir"
 Write-Host "Launcher:     $shimPath"
 Write-Host "Skill:        $SkillDir\SKILL.md"
-Write-Host "Uninstall:    Remove $InstallDir, remove $SkillDir, and drop $binDir from User PATH."
+Write-Host "Uninstall:    irm https://raw.githubusercontent.com/$Repo/main/uninstall.ps1 | iex"
